@@ -1,0 +1,650 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Text Summarizer & Detector</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <!-- Libraries for file processing -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.11.338/pdf.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.4.16/mammoth.browser.min.js"></script>
+    <style>
+        :root {
+            --bg-color: #0a0a0a;
+            --text-color: #e5e7eb;
+            --card-bg-color: rgba(17, 24, 39, 0.6);
+            --border-color: rgba(255, 255, 255, 0.1);
+            --input-bg-color: #111827; /* bg-gray-900 */
+            --input-border-color: #4b5563; /* border-gray-600 */
+            --muted-text-color: #9ca3af; /* text-gray-400 */
+        }
+
+        html.light {
+            --bg-color: #f3f4f6; /* bg-gray-100 */
+            --text-color: #1f2937; /* text-gray-800 */
+            --card-bg-color: rgba(255, 255, 255, 0.6);
+            --border-color: rgba(0, 0, 0, 0.1);
+            --input-bg-color: #ffffff;
+            --input-border-color: #d1d5db; /* border-gray-300 */
+            --muted-text-color: #6b7280; /* text-gray-500 */
+        }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            overflow-x: hidden;
+            transition: background-color 0.3s, color 0.3s;
+        }
+        .background-gradient {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 50vh;
+            background: radial-gradient(circle at 50% 0%, rgba(29, 78, 216, 0.15) 0%, rgba(17, 24, 39, 0) 60%);
+            z-index: -1;
+            transition: opacity 0.3s;
+        }
+        html.light .background-gradient {
+            opacity: 0.5;
+            background: radial-gradient(circle at 50% 0%, rgba(59, 130, 246, 0.1) 0%, rgba(243, 244, 246, 0) 60%);
+        }
+        .glass-card {
+            background: var(--card-bg-color);
+            -webkit-backdrop-filter: blur(20px);
+            backdrop-filter: blur(20px);
+            border: 1px solid var(--border-color);
+            transition: background-color 0.3s, border-color 0.3s;
+        }
+        textarea, select, input {
+            background-color: var(--input-bg-color);
+            border-color: var(--input-border-color);
+            color: var(--text-color);
+            transition: background-color 0.3s, border-color 0.3s, color 0.3s;
+        }
+        #summaryOutput {
+             background-color: var(--input-bg-color);
+             border-color: var(--input-border-color);
+        }
+        .loader {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #3498db;
+            border-radius: 50%;
+            width: 24px;
+            height: 24px;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        textarea::-webkit-scrollbar { width: 8px; }
+        textarea::-webkit-scrollbar-track { background: #2d3748; }
+        html.light textarea::-webkit-scrollbar-track { background: #e5e7eb; }
+        textarea::-webkit-scrollbar-thumb { background-color: #4a5568; border-radius: 4px; border: 2px solid #2d3748; }
+        html.light textarea::-webkit-scrollbar-thumb { background-color: #9ca3af; border-color: #e5e7eb; }
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+        @keyframes slideInUp { from { transform: translateY(20px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+        .animate-fade-in { animation: fadeIn 1s ease-out forwards; }
+        .animate-slide-in-up { animation: slideInUp 0.8s ease-out forwards; animation-delay: 0.2s; opacity: 0; }
+        .theme-btn-icon { transition: transform 0.3s ease-in-out; }
+    </style>
+</head>
+<body class="antialiased">
+    <div class="background-gradient"></div>
+
+    <!-- Theme Toggle Button -->
+    <div class="absolute top-4 right-4 z-20">
+        <button id="themeToggle" class="p-2 rounded-full bg-gray-500/20 hover:bg-gray-500/40 text-gray-300 dark:text-gray-400 focus:outline-none focus:ring-2 focus:ring-white">
+            <svg id="themeIconSun" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="theme-btn-icon hidden"><circle cx="12" cy="12" r="5"></circle><line x1="12" y1="1" x2="12" y2="3"></line><line x1="12" y1="21" x2="12" y2="23"></line><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line><line x1="1" y1="12" x2="3" y2="12"></line><line x1="21" y1="12" x2="23" y2="12"></line><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line></svg>
+            <svg id="themeIconMoon" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="theme-btn-icon"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path></svg>
+        </button>
+    </div>
+
+    <div class="min-h-screen flex flex-col items-center justify-center p-4 relative z-10">
+        
+        <header class="text-center mb-8 animate-fade-in">
+            <h1 class="text-4xl md:text-5xl font-bold text-inherit tracking-tight">
+                AI Text Summarizer & Detector
+            </h1>
+            <p class="text-gray-400 mt-2 text-lg" style="color: var(--muted-text-color);">
+                Paste your text to summarize, correct, or analyze for AI.
+            </p>
+        </header>
+
+        <main class="w-full max-w-4xl glass-card rounded-2xl shadow-2xl shadow-blue-500/10 overflow-hidden animate-slide-in-up">
+            <div class="p-6 md:p-8 space-y-6">
+                
+                <div>
+                    <div class="flex flex-wrap justify-between items-center mb-2 gap-2">
+                        <label for="inputText" class="block text-sm font-medium">Original Text</label>
+                        <div class="flex items-center gap-3">
+                             <button id="uploadBtn" class="text-sm flex items-center gap-1.5" style="color: var(--muted-text-color);" title="Upload a file">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
+                                Upload
+                            </button>
+                            <input type="file" id="fileInput" class="hidden" accept=".txt,.pdf,.docx">
+                            <button id="exampleBtn" class="text-sm flex items-center gap-1.5" style="color: var(--muted-text-color);" title="Load example text">
+                               <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path><path d="m9 12 2 2 4-4"></path></svg>
+                                Example
+                            </button>
+                            <button id="pasteBtn" class="text-sm flex items-center gap-1.5" style="color: var(--muted-text-color);" title="Paste from clipboard">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"></path><rect x="8" y="2" width="8" height="4" rx="1" ry="1"></rect></svg>
+                                Paste
+                            </button>
+                            <button id="clearBtn" class="text-sm flex items-center gap-1.5" style="color: var(--muted-text-color);" title="Clear text">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="15" y1="9" x2="9" y2="15"></line><line x1="9" y1="9" x2="15" y2="15"></line></svg>
+                                Clear
+                            </button>
+                        </div>
+                    </div>
+                    <div class="relative">
+                        <textarea id="inputText" rows="10" class="w-full p-4 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200 resize-y" placeholder="Paste your article, essay, or document here..."></textarea>
+                        <div id="inputAnalytics" class="absolute bottom-3 right-3 text-xs" style="color: var(--muted-text-color);">0 words · &lt; 1 min read</div>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div>
+                        <label for="lineCount" class="block text-sm font-medium mb-2">Summary Length (lines/points)</label>
+                        <input type="number" id="lineCount" value="5" min="1" max="20" class="w-full p-3 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500" />
+                    </div>
+                     <div>
+                        <label for="summaryStyle" class="block text-sm font-medium mb-2">Summary Style</label>
+                        <select id="summaryStyle" class="w-full pl-3 pr-10 py-3 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 appearance-none bg-no-repeat" style="background-image: url('data:image/svg+xml;charset=US-ASCII,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20width%3D%2224%22%20height%3D%2224%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22%239ca3af%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpolyline%20points%3D%226%209%2012%2015%2018%209%22%3E%3C/polyline%3E%3C/svg%3E'); background-position: right 0.75rem center;">
+                            <option value="paragraph">Paragraph</option>
+                            <option value="bullet points">Bullet Points</option>
+                            <option value="keywords">Keywords</option>
+                            <option value="professional">Professional Tone</option>
+                            <option value="casual">Casual Tone</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="flex items-center justify-center pt-2 flex-wrap gap-4">
+                     <button id="correctGrammarBtn" class="flex items-center justify-center gap-2 w-full sm:w-auto px-6 py-3 bg-emerald-600 text-white font-semibold rounded-lg hover:bg-emerald-700 focus:outline-none focus:ring-4 focus:ring-emerald-500/50 transition-all duration-300 transform hover:scale-105 shadow-lg">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"></path><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path></svg>
+                        <span>Correct</span>
+                        <div id="correctLoader" class="loader hidden"></div>
+                    </button>
+                    <button id="aiDetectBtn" class="flex items-center justify-center gap-2 w-full sm:w-auto px-6 py-3 bg-purple-600 text-white font-semibold rounded-lg hover:bg-purple-700 focus:outline-none focus:ring-4 focus:ring-purple-500/50 transition-all duration-300 transform hover:scale-105 shadow-lg">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg>
+                        <span>Analyze for AI</span>
+                        <div id="aiLoader" class="loader hidden"></div>
+                    </button>
+                    <button id="summarizeBtn" class="flex items-center justify-center gap-2 w-full sm:w-auto px-6 py-3 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-4 focus:ring-blue-500/50 transition-all duration-300 transform hover:scale-105 shadow-lg">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg>
+                        <span>Summarize</span>
+                        <div id="loader" class="loader hidden"></div>
+                    </button>
+                </div>
+
+                <div id="summaryContainer" class="space-y-4">
+                    <div class="flex justify-between items-center mb-2">
+                        <label for="summaryOutput" class="block text-sm font-medium">Summary</label>
+                        <div id="outputActions" class="flex items-center gap-3 opacity-0 transition-opacity">
+                             <button id="readAloudBtn" class="flex items-center gap-1.5 text-sm" title="Read summary aloud" style="color: var(--muted-text-color);">
+                                <svg id="readIcon" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"></path></svg>
+                                <svg id="stopIcon" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="hidden"><rect x="6" y="6" width="12" height="12"></rect></svg>
+                                <span id="readAloudBtnText">Read</span>
+                            </button>
+                            <button id="downloadBtn" class="flex items-center gap-1.5 text-sm" title="Download summary" style="color: var(--muted-text-color);">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+                                <span>Download</span>
+                            </button>
+                            <button id="copyBtn" class="flex items-center gap-1.5 text-sm" title="Copy to clipboard" style="color: var(--muted-text-color);">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+                                <span id="copyBtnText">Copy</span>
+                            </button>
+                        </div>
+                    </div>
+                    <div id="summaryOutput" class="w-full p-4 min-h-[150px] rounded-xl whitespace-pre-wrap transition-all duration-200">
+                        <span id="summaryPlaceholder" style="color: var(--muted-text-color);">Your summary will appear here...</span>
+                    </div>
+                    <div id="outputAnalytics" class="text-right text-xs mt-2" style="color: var(--muted-text-color);"></div>
+                </div>
+            </div>
+        </main>
+
+        <!-- NEW AI Analysis Result Card -->
+        <div id="aiResultCard" class="w-full max-w-4xl glass-card rounded-2xl shadow-2xl shadow-purple-500/10 overflow-hidden mt-8 hidden animate-fade-in">
+            <div class="p-6 md:p-8">
+                <div id="aiAnalysisResult">
+                    <!-- This will be populated by JS -->
+                </div>
+                 <div id="aiAnalysisError" class="text-red-400"></div>
+            </div>
+        </div>
+        
+        <footer class="text-center mt-8 animate-fade-in">
+            <p class="text-sm" style="color: var(--muted-text-color);">Powered by Gemini AI</p>
+        </footer>
+    </div>
+
+    <script>
+        // Main elements
+        const inputText = document.getElementById('inputText');
+        const summaryOutput = document.getElementById('summaryOutput');
+        const summaryPlaceholder = document.getElementById('summaryPlaceholder');
+        const outputActions = document.getElementById('outputActions');
+        const inputAnalytics = document.getElementById('inputAnalytics');
+        const outputAnalytics = document.getElementById('outputAnalytics');
+        const lineCount = document.getElementById('lineCount');
+        const summaryStyle = document.getElementById('summaryStyle');
+        const summaryContainer = document.getElementById('summaryContainer');
+        
+        // Theme elements
+        const themeToggle = document.getElementById('themeToggle');
+        const themeIconSun = document.getElementById('themeIconSun');
+        const themeIconMoon = document.getElementById('themeIconMoon');
+
+        // Action Buttons
+        const summarizeBtn = document.getElementById('summarizeBtn');
+        const correctGrammarBtn = document.getElementById('correctGrammarBtn');
+        const aiDetectBtn = document.getElementById('aiDetectBtn');
+        
+        // Loaders
+        const loader = document.getElementById('loader');
+        const correctLoader = document.getElementById('correctLoader');
+        const aiLoader = document.getElementById('aiLoader');
+
+        // Input action buttons
+        const clearBtn = document.getElementById('clearBtn');
+        const pasteBtn = document.getElementById('pasteBtn');
+        const exampleBtn = document.getElementById('exampleBtn');
+        const uploadBtn = document.getElementById('uploadBtn');
+        const fileInput = document.getElementById('fileInput');
+
+
+        // Output action buttons
+        const copyBtn = document.getElementById('copyBtn');
+        const copyBtnText = document.getElementById('copyBtnText');
+        const readAloudBtn = document.getElementById('readAloudBtn');
+        const readAloudBtnText = document.getElementById('readAloudBtnText');
+        const readIcon = document.getElementById('readIcon');
+        const stopIcon = document.getElementById('stopIcon');
+        const downloadBtn = document.getElementById('downloadBtn');
+
+        // AI Detection Result Elements
+        const aiResultCard = document.getElementById('aiResultCard');
+        const aiAnalysisResult = document.getElementById('aiAnalysisResult');
+        const aiAnalysisError = document.getElementById('aiAnalysisError');
+
+        // --- THEME TOGGLE ---
+        function applyTheme(theme) {
+            if (theme === 'light') {
+                document.documentElement.classList.add('light');
+                document.documentElement.classList.remove('dark');
+                themeIconSun.classList.remove('hidden');
+                themeIconMoon.classList.add('hidden');
+            } else {
+                document.documentElement.classList.add('dark');
+                document.documentElement.classList.remove('light');
+                themeIconSun.classList.add('hidden');
+                themeIconMoon.classList.remove('hidden');
+            }
+        }
+        themeToggle.addEventListener('click', () => {
+            const currentTheme = localStorage.getItem('theme') || 'dark';
+            const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
+            localStorage.setItem('theme', newTheme);
+            applyTheme(newTheme);
+        });
+        applyTheme(localStorage.getItem('theme') || 'dark');
+
+
+        // --- TEXT ANALYTICS ---
+        function calculateTextAnalytics(text) {
+            const words = text.trim().split(/\s+/).filter(Boolean);
+            const wordCount = words.length;
+            const readingTime = Math.ceil(wordCount / 200);
+            const readingTimeText = readingTime < 1 ? '< 1 min read' : `${readingTime} min read`;
+            return { wordCount, readingTimeText };
+        }
+        function updateInputAnalytics() {
+            const analytics = calculateTextAnalytics(inputText.value);
+            inputAnalytics.textContent = analytics.wordCount > 0 ? `${analytics.wordCount} words · ${analytics.readingTimeText}` : `0 words · < 1 min read`;
+        }
+        inputText.addEventListener('input', updateInputAnalytics);
+
+        // --- INPUT ACTIONS (Paste, Clear, Example, Upload) ---
+        pasteBtn.addEventListener('click', async () => {
+            try {
+                inputText.value = await navigator.clipboard.readText();
+                updateInputAnalytics();
+                inputText.focus();
+            } catch (err) { console.error('Failed to read clipboard: ', err); }
+        });
+        
+        clearBtn.addEventListener('click', () => {
+            inputText.value = '';
+            summaryContainer.classList.remove('hidden');
+            summaryOutput.innerHTML = '';
+            summaryOutput.appendChild(summaryPlaceholder);
+            outputAnalytics.textContent = '';
+            outputActions.classList.add('opacity-0');
+            aiResultCard.classList.add('hidden');
+            if(window.speechSynthesis.speaking) window.speechSynthesis.cancel();
+            updateInputAnalytics();
+            inputText.focus();
+        });
+        
+        exampleBtn.addEventListener('click', () => {
+            const exampleText = `The National Aeronautics and Space Administration (NASA) is the United States government agency responsible for the nation's civilian space program and for aeronautics and aerospace research. Established on July 29, 1958, NASA replaced the National Advisory Committee for Aeronautics (NACA) to lead the U.S. into the Space Age. Over the decades, NASA has achieved remarkable milestones, including landing humans on the Moon during the Apollo missions, launching the Hubble Space Telescope, and developing the Space Shuttle program. Today, NASA focuses on exploring Mars, the Moon, and beyond through missions like Artemis, which aims to return humans to the lunar surface, and the Perseverance rover, which searches for signs of past life on Mars.`;
+            inputText.value = exampleText;
+            updateInputAnalytics();
+        });
+        
+        uploadBtn.addEventListener('click', () => {
+            fileInput.click();
+        });
+
+        fileInput.addEventListener('change', (event) => {
+            const file = event.target.files[0];
+            if (!file) return;
+            processFile(file);
+        });
+
+        function processFile(file) {
+            inputText.value = `Reading file: ${file.name}...`;
+            const reader = new FileReader();
+
+            if (file.type === 'text/plain') {
+                reader.onload = (e) => {
+                    inputText.value = e.target.result;
+                    updateInputAnalytics();
+                };
+                reader.readAsText(file);
+            } else if (file.type === 'application/pdf') {
+                reader.onload = (e) => {
+                    const typedarray = new Uint8Array(e.target.result);
+                    pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.11.338/pdf.worker.min.js`;
+                    pdfjsLib.getDocument(typedarray).promise.then(async (pdf) => {
+                        let text = '';
+                        for (let i = 1; i <= pdf.numPages; i++) {
+                            const page = await pdf.getPage(i);
+                            const content = await page.getTextContent();
+                            text += content.items.map(item => item.str).join(' ') + '\n';
+                        }
+                        inputText.value = text;
+                        updateInputAnalytics();
+                    });
+                };
+                reader.readAsArrayBuffer(file);
+            } else if (file.name.endsWith('.docx')) {
+                 reader.onload = (e) => {
+                    mammoth.extractRawText({ arrayBuffer: e.target.result })
+                        .then(result => {
+                            inputText.value = result.value;
+                            updateInputAnalytics();
+                        })
+                        .catch(err => {
+                            console.error('Error reading docx:', err);
+                            inputText.value = 'Error: Could not read the .docx file.';
+                        });
+                };
+                reader.readAsArrayBuffer(file);
+            } else {
+                inputText.value = `Error: Unsupported file type "${file.type}". Please use .txt, .pdf, or .docx.`;
+            }
+        }
+
+
+        // --- MAIN FUNCTION HANDLERS ---
+        summarizeBtn.addEventListener('click', handleSummarize);
+        correctGrammarBtn.addEventListener('click', handleCorrectGrammar);
+        aiDetectBtn.addEventListener('click', handleAiDetection);
+        downloadBtn.addEventListener('click', handleDownload);
+        copyBtn.addEventListener('click', handleCopy);
+        readAloudBtn.addEventListener('click', handleReadAloud);
+
+        async function handleSummarize() {
+            const textToSummarize = inputText.value.trim();
+            if (!textToSummarize) {
+                summaryOutput.innerHTML = '<span class="text-red-400">Please paste some text to summarize.</span>';
+                return;
+            }
+            setLoadingState(true, 'summarize');
+            summaryContainer.classList.remove('hidden');
+            aiResultCard.classList.add('hidden');
+            outputAnalytics.textContent = ''; 
+
+            try {
+                const requestBody = {
+                    text: textToSummarize,
+                    style: summaryStyle.value,
+                    length: parseInt(lineCount.value)
+                };
+                const summary = await callBackendApi('/summarize', requestBody);
+                displaySummary(summary.result, summaryStyle.value);
+            } catch (error) {
+                console.error('Error during summarization:', error);
+                summaryOutput.innerHTML = `<span class="text-red-400">An error occurred.</span><br><br><span class="text-xs text-gray-500">${error.message}</span>`;
+            } finally {
+                setLoadingState(false, 'summarize');
+            }
+        }
+
+        async function handleCorrectGrammar() {
+            const textToCorrect = inputText.value.trim();
+            if (!textToCorrect) return;
+            setLoadingState(true, 'correct');
+            try {
+                const response = await callBackendApi('/correct', { text: textToCorrect });
+                inputText.value = response.result;
+                updateInputAnalytics();
+            } catch (error) {
+                console.error('Error during grammar correction:', error);
+                aiResultCard.classList.remove('hidden');
+                aiAnalysisResult.innerHTML = '';
+                aiAnalysisError.innerHTML = `<span class="text-red-400">Correction failed.</span><br><br><span class="text-xs text-gray-500">${error.message}</span>`;
+            } finally {
+                setLoadingState(false, 'correct');
+            }
+        }
+
+        async function handleAiDetection() {
+            const textToAnalyze = inputText.value.trim();
+            if (!textToAnalyze) {
+                aiResultCard.classList.remove('hidden');
+                aiAnalysisResult.innerHTML = '';
+                aiAnalysisError.textContent = 'Please provide some text to analyze.';
+                return;
+            }
+            setLoadingState(true, 'ai');
+            summaryContainer.classList.add('hidden');
+            aiResultCard.classList.remove('hidden');
+            aiAnalysisResult.innerHTML = '';
+            aiAnalysisError.innerHTML = '';
+
+            try {
+                const response = await callBackendApi('/detect-ai', { text: textToAnalyze });
+                displayAiResult(response.result);
+            } catch (error) {
+                console.error('Error during AI detection:', error);
+                aiAnalysisError.innerHTML = `<span class="text-red-400">Analysis failed.</span><br><br><span class="text-xs text-gray-500">${error.message}</span>`;
+            } finally {
+                setLoadingState(false, 'ai');
+            }
+        }
+
+        async function callBackendApi(endpoint, body) {
+            const serverUrl = 'http://127.0.0.1:5000';
+            try {
+                const response = await fetch(`${serverUrl}${endpoint}`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(body)
+                });
+
+                if (!response.ok) {
+                    const errorData = await response.json().catch(() => ({ error: `Server returned an error: ${response.status}` }));
+                    throw new Error(errorData.error);
+                }
+                return await response.json();
+            } catch (error) {
+                console.error(`Failed to connect to backend at ${endpoint}`, error);
+                throw new Error("Could not connect to the local server. Is the Python script running?");
+            }
+        }
+        
+        // --- OUTPUT ACTIONS (Copy, Read, Download) ---
+        function handleCopy() {
+            const textToCopy = summaryOutput.innerText;
+            if (navigator.clipboard && window.isSecureContext) {
+                navigator.clipboard.writeText(textToCopy).then(() => {
+                    copyBtnText.textContent = 'Copied!';
+                    setTimeout(() => { copyBtnText.textContent = 'Copy'; }, 2000);
+                });
+            } else {
+                const textArea = document.createElement("textarea");
+                textArea.value = textToCopy;
+                textArea.style.position = "fixed";
+                textArea.style.left = "-9999px";
+                document.body.appendChild(textArea);
+                textArea.focus();
+                textArea.select();
+                try {
+                    document.execCommand('copy');
+                    copyBtnText.textContent = 'Copied!';
+                    setTimeout(() => { copyBtnText.textContent = 'Copy'; }, 2000);
+                } catch (err) {
+                    console.error('Fallback copy failed', err);
+                }
+                document.body.removeChild(textArea);
+            }
+        }
+
+        function handleReadAloud() {
+            if (!('speechSynthesis' in window)) return;
+            if (speechSynthesis.speaking) {
+                speechSynthesis.cancel();
+                return;
+            }
+            const utterance = new SpeechSynthesisUtterance(summaryOutput.innerText);
+            utterance.onstart = () => {
+                readAloudBtnText.textContent = 'Stop';
+                readIcon.classList.add('hidden');
+                stopIcon.classList.remove('hidden');
+            };
+            utterance.onend = () => {
+                readAloudBtnText.textContent = 'Read';
+                readIcon.classList.remove('hidden');
+                stopIcon.classList.add('hidden');
+            };
+            speechSynthesis.speak(utterance);
+        }
+
+        function handleDownload() {
+            const blob = new Blob([summaryOutput.innerText], { type: 'text/plain' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'summary.txt';
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        }
+
+        // --- UI STATE MANAGEMENT ---
+        function setLoadingState(isLoading, type) {
+            let btn, ldr, text, loadingText;
+
+            if (type === 'summarize') {
+                [btn, ldr, text, loadingText] = [summarizeBtn, loader, 'Summarize', 'Summarizing...'];
+            } else if (type === 'correct') {
+                [btn, ldr, text, loadingText] = [correctGrammarBtn, correctLoader, 'Correct', 'Correcting...'];
+            } else if (type === 'ai') {
+                [btn, ldr, text, loadingText] = [aiDetectBtn, aiLoader, 'Analyze for AI', 'Analyzing...'];
+            } else {
+                return;
+            }
+            
+            btn.disabled = isLoading;
+            ldr.classList.toggle('hidden', !isLoading);
+            btn.querySelector('span').textContent = isLoading ? loadingText : text;
+        }
+        
+        function displaySummary(summaryText, style) {
+            summaryOutput.innerHTML = '';
+            
+            if (style === 'bullet points') {
+                try {
+                    const points = (typeof summaryText === 'string') ? JSON.parse(summaryText) : summaryText;
+                    const ul = document.createElement('ul');
+                    ul.className = 'list-disc list-inside space-y-2';
+                    points.forEach(point => {
+                        const li = document.createElement('li');
+                        li.textContent = point;
+                        ul.appendChild(li);
+                    });
+                    summaryOutput.appendChild(ul);
+                } catch (e) {
+                    console.error("Failed to parse bullet points JSON:", e);
+                    const p = document.createElement('p');
+                    p.textContent = summaryText; 
+                    summaryOutput.appendChild(p);
+                }
+            } else {
+                const p = document.createElement('p');
+                p.textContent = summaryText;
+                summaryOutput.appendChild(p);
+            }
+
+            const analytics = calculateTextAnalytics(summaryOutput.innerText);
+            outputAnalytics.textContent = `${analytics.wordCount} words · ${analytics.readingTimeText}`;
+            outputActions.classList.remove('opacity-0');
+        }
+
+        function displayAiResult(data) {
+            const aiProb = data.overall_probability;
+            const humanProb = 100 - aiProb;
+
+            aiAnalysisResult.innerHTML = `
+                <div class="flex flex-col md:flex-row gap-6 md:gap-8 items-center">
+                    <div class="flex-shrink-0 text-center">
+                        <div class="text-7xl font-bold text-orange-400">${aiProb}%</div>
+                        <div class="font-semibold" style="color: var(--text-color);">of text is likely AI</div>
+                        <div class="text-sm mt-2" style="color: var(--muted-text-color);">Powered by Gemini AI</div>
+                    </div>
+                    <div class="w-full">
+                        <div class="w-full h-8 flex rounded-full overflow-hidden mb-4 border" style="border-color: var(--border-color);">
+                            <div class="bg-orange-400 h-full flex items-center justify-center text-xs font-bold text-orange-900" style="width: ${aiProb}%">AI</div>
+                            <div class="bg-blue-400 h-full flex items-center justify-center text-xs font-bold text-blue-900" style="width: ${humanProb}%">Human</div>
+                        </div>
+                        <ul class="space-y-2 text-sm">
+                            <li class="flex justify-between items-center">
+                                <span class="flex items-center gap-2">
+                                    <span class="w-3 h-3 rounded-full bg-orange-400"></span>
+                                    AI-generated
+                                </span>
+                                <strong>${data.breakdown.ai_generated}%</strong>
+                            </li>
+                            <li class="flex justify-between items-center">
+                                <span class="flex items-center gap-2">
+                                    <span class="w-3 h-3 rounded-full bg-blue-400"></span>
+                                    Human-written
+                                </span>
+                                <strong>${data.breakdown.human_written}%</strong>
+                            </li>
+                        </ul>
+                        <details class="mt-4">
+                            <summary class="cursor-pointer font-semibold text-sm" style="color: var(--muted-text-color);">Understanding your results</summary>
+                            <p class="mt-2 text-xs p-3 rounded-lg" style="color: var(--muted-text-color); background-color: var(--input-bg-color);">
+                                ${data.explanation} This detector is not 100% accurate and should be used as an indicator rather than a definitive judgment.
+                            </p>
+                        </details>
+                    </div>
+                </div>
+            `;
+        }
+        
+        // --- INITIALIZATION ---
+        document.addEventListener('DOMContentLoaded', () => {
+            updateInputAnalytics();
+            applyTheme(localStorage.getItem('theme') || 'dark');
+        });
+    </script>
+
+</body>
+</html>
